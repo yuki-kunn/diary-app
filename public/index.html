@@ -21,24 +21,14 @@
     <div class="login-card">
       <div class="login-logo">🌿</div>
       <h1 class="login-title">ひだまり日記</h1>
-      <p class="login-sub" id="login-message">パスコードを入力してください</p>
-      <div class="pin-dots" id="pin-dots">
-        <span></span><span></span><span></span><span></span>
-      </div>
-      <div class="pin-pad" id="pin-pad">
-        <button data-key="1">1</button>
-        <button data-key="2">2</button>
-        <button data-key="3">3</button>
-        <button data-key="4">4</button>
-        <button data-key="5">5</button>
-        <button data-key="6">6</button>
-        <button data-key="7">7</button>
-        <button data-key="8">8</button>
-        <button data-key="9">9</button>
-        <button class="pin-blank" disabled></button>
-        <button data-key="0">0</button>
-        <button data-key="del" class="pin-del">⌫</button>
-      </div>
+      <p class="login-sub" id="login-message">パスワードを入力してください</p>
+      <form id="login-form" class="login-form">
+        <input type="password" id="login-password" class="login-input"
+               placeholder="パスワード" autocomplete="current-password" minlength="6" required>
+        <input type="password" id="login-password2" class="login-input hidden"
+               placeholder="パスワード(確認)" autocomplete="new-password" minlength="6">
+        <button type="submit" class="btn-primary login-btn" id="login-submit">ログイン</button>
+      </form>
     </div>
   </section>
 
@@ -129,18 +119,19 @@
         </div>
 
         <div class="card">
-          <h3 class="card-title">🔒 パスコード</h3>
-          <p class="card-desc">アプリを開くときのパスコード(4桁)を設定できます。</p>
-          <label class="switch-row">
-            <span>パスコードロック</span>
-            <input type="checkbox" id="lock-toggle" class="switch">
-          </label>
-          <button class="btn-ghost hidden" id="lock-change">パスコードを変更</button>
+          <h3 class="card-title">🔒 アカウント</h3>
+          <p class="card-desc">日記はサーバーのデータベースに保存され、パスワードで保護されています。</p>
+          <div class="pw-change" id="pw-change-form">
+            <input type="password" id="pw-current" class="login-input" placeholder="現在のパスワード" autocomplete="current-password">
+            <input type="password" id="pw-next" class="login-input" placeholder="新しいパスワード(6文字以上)" autocomplete="new-password">
+            <button class="btn-ghost" id="pw-change-btn">パスワードを変更</button>
+          </div>
+          <button class="btn-danger-ghost" id="logout-btn">ログアウト</button>
         </div>
 
         <div class="card">
           <h3 class="card-title">💾 データ</h3>
-          <p class="card-desc" id="storage-info">保存容量を計算中…</p>
+          <p class="card-desc" id="storage-info">読み込み中…</p>
           <div class="btn-row">
             <button class="btn-ghost" id="export-btn">エクスポート</button>
             <label class="btn-ghost" for="import-input">インポート
@@ -149,7 +140,7 @@
           </div>
         </div>
 
-        <p class="app-version">ひだまり日記 v1.0 — データはこの端末の中にだけ保存されます</p>
+        <p class="app-version">ひだまり日記 v2.0 — データはサーバーのデータベースに保存されます</p>
       </section>
     </main>
 
@@ -177,6 +168,7 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="/js/db.js"></script>
+  <script src="/js/api.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* ひだまり日記 — メインアプリ */
+/* ひだまり日記 — メインアプリ(サーバーDB版) */
 (() => {
   'use strict';
 
@@ -18,13 +18,6 @@
     const w = ['日', '月', '火', '水', '木', '金', '土'][new Date(y, m - 1, d).getDay()];
     return `${y}年${m}月${d}日(${w})`;
   }
-  function uuid() {
-    return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-  }
-  async function sha256(text) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
   function toast(msg) {
     const el = $('#toast');
     el.textContent = msg;
@@ -32,11 +25,27 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.add('hidden'), 2600);
   }
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+  // APIエラーの共通処理(セッション切れならログイン画面へ)
+  function handleError(e) {
+    if (e.unauthorized) {
+      showLogin('login', 'セッションが切れました。ログインしてください');
+    } else {
+      toast(e.message);
+    }
+  }
 
   // ===== 状態 =====
-  let currentMonth = new Date(); // カレンダー表示中の月
-  let editingDate = null;        // 編集中の日付
-  let editorPhotos = [];         // [{id, blob, isNew}]
+  let currentMonth = new Date();
+  let editingDate = null;
+  let editorPhotos = [];       // [{id?, blob?, url, isNew}]
   let removedPhotoIds = [];
   const objectUrls = new Set();
 
@@ -64,78 +73,58 @@
     btn.addEventListener('click', () => showView(btn.dataset.view));
   });
 
-  // ===== ログイン(パスコード) =====
-  const PIN_KEY = 'diary-pin-hash';
-  let pinBuffer = '';
-  let pinMode = 'verify'; // verify | set | confirm
-  let pinFirst = '';
-  let pinResolve = null;
+  // ===== ログイン =====
+  let loginMode = 'login'; // login | setup
 
-  function updatePinDots() {
-    $$('#pin-dots span').forEach((s, i) => s.classList.toggle('filled', i < pinBuffer.length));
-  }
   function showLogin(mode, message) {
-    pinMode = mode;
-    pinBuffer = '';
-    pinFirst = '';
-    updatePinDots();
-    $('#login-message').textContent = message;
+    loginMode = mode;
+    $('#login-message').textContent = message ||
+      (mode === 'setup' ? 'はじめまして。パスワードを設定してください(6文字以上)' : 'パスワードを入力してください');
     $('#login-message').classList.remove('error');
+    $('#login-password').value = '';
+    $('#login-password2').value = '';
+    $('#login-password2').classList.toggle('hidden', mode !== 'setup');
+    $('#login-password2').required = mode === 'setup';
+    $('#login-submit').textContent = mode === 'setup' ? 'はじめる' : 'ログイン';
     $('#view-login').classList.remove('hidden');
     $('#app-shell').classList.add('hidden');
-    return new Promise(res => { pinResolve = res; });
   }
   function hideLogin() {
     $('#view-login').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
   }
-  async function handlePinComplete() {
-    const msg = $('#login-message');
-    if (pinMode === 'verify') {
-      const hash = await sha256(pinBuffer);
-      if (hash === localStorage.getItem(PIN_KEY)) {
-        hideLogin();
-        pinResolve && pinResolve(true);
-      } else {
-        msg.textContent = 'パスコードが違います';
-        msg.classList.add('error');
-        $('#pin-dots').classList.add('shake');
-        setTimeout(() => $('#pin-dots').classList.remove('shake'), 400);
-        pinBuffer = '';
-        updatePinDots();
-      }
-    } else if (pinMode === 'set') {
-      pinFirst = pinBuffer;
-      pinBuffer = '';
-      pinMode = 'confirm';
-      updatePinDots();
-      msg.textContent = 'もう一度入力してください';
-      msg.classList.remove('error');
-    } else if (pinMode === 'confirm') {
-      if (pinBuffer === pinFirst) {
-        localStorage.setItem(PIN_KEY, await sha256(pinBuffer));
-        hideLogin();
-        toast('パスコードを設定しました 🔒');
-        pinResolve && pinResolve(true);
-      } else {
-        pinMode = 'set';
-        pinBuffer = '';
-        updatePinDots();
-        msg.textContent = '一致しません。新しいパスコードを入力';
-        msg.classList.add('error');
-      }
-    }
+  function loginError(msg) {
+    const el = $('#login-message');
+    el.textContent = msg;
+    el.classList.add('error');
+    const form = $('#login-form');
+    form.classList.add('shake');
+    setTimeout(() => form.classList.remove('shake'), 400);
   }
-  $('#pin-pad').addEventListener('click', (e) => {
-    const key = e.target.dataset && e.target.dataset.key;
-    if (!key) return;
-    if (key === 'del') {
-      pinBuffer = pinBuffer.slice(0, -1);
-    } else if (pinBuffer.length < 4) {
-      pinBuffer += key;
+
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('#login-password').value;
+    const btn = $('#login-submit');
+    btn.disabled = true;
+    try {
+      if (loginMode === 'setup') {
+        if (password !== $('#login-password2').value) {
+          loginError('パスワードが一致しません');
+          return;
+        }
+        await Api.setup(password);
+        toast('パスワードを設定しました 🔒');
+      } else {
+        await Api.login(password);
+      }
+      hideLogin();
+      await afterLogin();
+    } catch (err) {
+      loginError(err.message);
+    } finally {
+      btn.disabled = false;
     }
-    updatePinDots();
-    if (pinBuffer.length === 4) setTimeout(handlePinComplete, 120);
   });
 
   // ===== カレンダー =====
@@ -144,16 +133,16 @@
     const m = currentMonth.getMonth();
     $('#cal-title').textContent = `${y}年${m + 1}月`;
 
-    const entries = await DiaryDB.getAllEntries();
+    let entries = [];
+    try { entries = await Api.getEntries(); } catch (e) { handleError(e); return; }
     const entryMap = {};
-    entries.forEach(e => { entryMap[e.date] = e; });
+    entries.forEach(en => { entryMap[en.date] = en; });
 
     const first = new Date(y, m, 1);
     const startOffset = first.getDay();
     const daysInMonth = new Date(y, m + 1, 0).getDate();
     const grid = $('#cal-grid');
     grid.innerHTML = '';
-    revokeAllUrls();
 
     const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
     const today = todayStr();
@@ -178,15 +167,11 @@
 
       if (entry && entry.photoIds && entry.photoIds.length > 0) {
         cell.classList.add('has-photo');
-        DiaryDB.getPhoto(entry.photoIds[0]).then(photo => {
-          if (photo) {
-            const img = document.createElement('img');
-            img.className = 'thumb';
-            img.src = makeUrl(photo.blob);
-            img.alt = '';
-            cell.prepend(img);
-          }
-        });
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.src = Api.photoUrl(entry.photoIds[0]);
+        img.alt = '';
+        cell.prepend(img);
       }
       cell.appendChild(num);
       if (entry) {
@@ -220,7 +205,8 @@
     editorPhotos = [];
     removedPhotoIds = [];
     $('#editor-date').textContent = jpDate(dateStr);
-    const entry = await DiaryDB.getEntry(dateStr);
+    let entry = null;
+    try { entry = await Api.getEntry(dateStr); } catch (e) { handleError(e); return; }
     $('#editor-title').value = entry ? (entry.title || '') : '';
     $('#editor-text').value = entry ? (entry.text || '') : '';
     $$('#mood-row .mood-options button').forEach(b => {
@@ -228,10 +214,9 @@
     });
     $('#editor-delete').classList.toggle('hidden', !entry);
     if (entry && entry.photoIds) {
-      for (const id of entry.photoIds) {
-        const p = await DiaryDB.getPhoto(id);
-        if (p) editorPhotos.push({ id: p.id, blob: p.blob, isNew: false });
-      }
+      entry.photoIds.forEach(id => {
+        editorPhotos.push({ id, url: Api.photoUrl(id), isNew: false });
+      });
     }
     renderEditorPhotos();
     showView('editor');
@@ -244,7 +229,7 @@
       const item = document.createElement('div');
       item.className = 'photo-item';
       const img = document.createElement('img');
-      img.src = makeUrl(p.blob);
+      img.src = p.isNew ? makeUrl(p.blob) : p.url;
       img.alt = '';
       const rm = document.createElement('button');
       rm.className = 'photo-remove';
@@ -291,7 +276,7 @@
     for (const file of files) {
       try {
         const blob = await compressImage(file);
-        editorPhotos.push({ id: uuid(), blob, isNew: true });
+        editorPhotos.push({ blob, isNew: true });
       } catch (err) {
         toast('画像の追加に失敗しました');
       }
@@ -317,44 +302,48 @@
       toast('内容を入力してください');
       return;
     }
-    // 写真を保存/削除
-    for (const id of removedPhotoIds) await DiaryDB.deletePhoto(id);
-    for (const p of editorPhotos) {
-      if (p.isNew) {
-        await DiaryDB.putPhoto({ id: p.id, date: editingDate, blob: p.blob, createdAt: Date.now() });
+    const btn = $('#editor-save');
+    btn.disabled = true;
+    try {
+      // 新しい写真をアップロード、削除された写真を削除
+      for (const p of editorPhotos) {
+        if (p.isNew && !p.id) {
+          const base64 = await blobToBase64(p.blob);
+          const { id } = await Api.uploadPhoto(editingDate, base64, 'image/jpeg');
+          p.id = id;
+        }
       }
+      for (const id of removedPhotoIds) await Api.deletePhoto(id);
+      await Api.putEntry({
+        date: editingDate, title, text, mood,
+        photoIds: editorPhotos.map(p => p.id),
+      });
+      toast('保存しました 🌿');
+      showView('calendar');
+    } catch (e) {
+      handleError(e);
+    } finally {
+      btn.disabled = false;
     }
-    await DiaryDB.putEntry({
-      date: editingDate,
-      title, text, mood,
-      photoIds: editorPhotos.map(p => p.id),
-      updatedAt: Date.now(),
-    });
-    reportActivity(editingDate);
-    toast('保存しました 🌿');
-    showView('calendar');
   });
 
   $('#editor-delete').addEventListener('click', async () => {
     if (!confirm('この日の日記と写真を削除します。よろしいですか?')) return;
-    const entry = await DiaryDB.getEntry(editingDate);
-    if (entry && entry.photoIds) {
-      for (const id of entry.photoIds) await DiaryDB.deletePhoto(id);
-    }
-    await DiaryDB.deleteEntry(editingDate);
-    toast('削除しました');
-    showView('calendar');
+    try {
+      await Api.deleteEntry(editingDate);
+      toast('削除しました');
+      showView('calendar');
+    } catch (e) { handleError(e); }
   });
 
   $('#editor-back').addEventListener('click', () => showView('calendar'));
 
   // ===== ギャラリー =====
   async function renderGallery() {
-    const photos = await DiaryDB.getAllPhotos();
-    photos.sort((a, b) => (b.date > a.date ? 1 : -1) || b.createdAt - a.createdAt);
+    let photos = [];
+    try { photos = await Api.getPhotosMeta(); } catch (e) { handleError(e); return; }
     const grid = $('#gallery-grid');
     grid.innerHTML = '';
-    revokeAllUrls();
     $('#gallery-count').textContent = photos.length ? `${photos.length}枚の思い出` : '';
     $('#gallery-empty').classList.toggle('hidden', photos.length > 0);
 
@@ -362,7 +351,7 @@
       const item = document.createElement('button');
       item.className = 'gallery-item';
       const img = document.createElement('img');
-      img.src = makeUrl(p.blob);
+      img.src = Api.photoUrl(p.id);
       img.alt = p.date;
       const cap = document.createElement('span');
       cap.className = 'gallery-date';
@@ -375,7 +364,7 @@
   }
 
   function openLightbox(photo) {
-    $('#lightbox-img').src = makeUrl(photo.blob);
+    $('#lightbox-img').src = Api.photoUrl(photo.id);
     $('#lightbox-caption').textContent = jpDate(photo.date) + ' — タップで日記を開く';
     $('#lightbox').classList.remove('hidden');
     $('#lightbox-img').onclick = () => {
@@ -416,54 +405,28 @@
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      const res = await fetch('/api/vapid-public-key');
-      const { publicKey } = await res.json();
+      const { publicKey } = await Api.vapidKey();
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
     }
-    await fetch('/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: sub.toJSON() }),
-    });
+    await Api.subscribe(sub.toJSON());
     localStorage.setItem(NOTIFY_KEY, '1');
-    // 今日すでに書いていればサーバーに伝えておく
-    const entry = await DiaryDB.getEntry(todayStr());
-    if (entry) reportActivity(todayStr());
     return sub;
   }
 
   async function disableNotifications() {
     const sub = await getSubscription();
     if (sub) {
-      await fetch('/api/unsubscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: sub.endpoint }),
-      }).catch(() => {});
+      await Api.unsubscribe(sub.endpoint).catch(() => {});
       await sub.unsubscribe();
     }
     localStorage.removeItem(NOTIFY_KEY);
   }
 
-  // 日記保存をサーバーへ報告(22時のリマインド抑止)
-  async function reportActivity(date) {
-    try {
-      const sub = await getSubscription();
-      if (!sub) return;
-      await fetch('/api/activity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: sub.endpoint, date }),
-      });
-    } catch (e) { /* オフライン時は無視 */ }
-  }
-
   // ===== 設定 =====
   async function renderSettings() {
-    // 通知
     const notifyToggle = $('#notify-toggle');
     const sub = await getSubscription().catch(() => null);
     notifyToggle.checked = !!sub && localStorage.getItem(NOTIFY_KEY) === '1';
@@ -479,18 +442,12 @@
       hint.textContent = '';
     }
 
-    // パスコード
-    const hasPin = !!localStorage.getItem(PIN_KEY);
-    $('#lock-toggle').checked = hasPin;
-    $('#lock-change').classList.toggle('hidden', !hasPin);
-
-    // ストレージ
-    if (navigator.storage && navigator.storage.estimate) {
-      const est = await navigator.storage.estimate();
-      const used = (est.usage / 1024 / 1024).toFixed(1);
-      const entries = await DiaryDB.getAllEntries();
-      const photos = await DiaryDB.getAllPhotos();
-      $('#storage-info').textContent = `日記 ${entries.length}件 / 写真 ${photos.length}枚 / 使用容量 約${used}MB`;
+    try {
+      const entries = await Api.getEntries();
+      const photos = await Api.getPhotosMeta();
+      $('#storage-info').textContent = `日記 ${entries.length}件 / 写真 ${photos.length}枚`;
+    } catch (e) {
+      $('#storage-info').textContent = '';
     }
   }
 
@@ -516,62 +473,36 @@
   $('#notify-test').addEventListener('click', async () => {
     const sub = await getSubscription();
     if (!sub) { toast('先に通知をオンにしてください'); return; }
-    const res = await fetch('/api/test-push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint: sub.endpoint }),
-    });
-    toast(res.ok ? 'テスト通知を送信しました' : '送信に失敗しました');
+    try {
+      await Api.testPush(sub.endpoint);
+      toast('テスト通知を送信しました');
+    } catch (e) { handleError(e); }
   });
 
-  $('#lock-toggle').addEventListener('change', async (e) => {
-    if (e.target.checked) {
-      const ok = await showLogin('set', '新しいパスコード(4桁)を入力');
-      if (!ok) e.target.checked = false;
-      renderSettings();
-      showView('settings');
-    } else {
-      localStorage.removeItem(PIN_KEY);
-      toast('パスコードを解除しました');
-      renderSettings();
-    }
+  $('#pw-change-btn').addEventListener('click', async () => {
+    const current = $('#pw-current').value;
+    const next = $('#pw-next').value;
+    if (!current || !next) { toast('両方のパスワードを入力してください'); return; }
+    try {
+      await Api.changePassword(current, next);
+      $('#pw-current').value = '';
+      $('#pw-next').value = '';
+      toast('パスワードを変更しました 🔒');
+    } catch (e) { handleError(e); }
   });
 
-  $('#lock-change').addEventListener('click', async () => {
-    await showLogin('set', '新しいパスコード(4桁)を入力');
-    showView('settings');
+  $('#logout-btn').addEventListener('click', async () => {
+    await Api.logout().catch(() => {});
+    showLogin('login', 'ログアウトしました');
   });
 
   // ===== エクスポート / インポート =====
-  function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result.split(',')[1]);
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
-  }
-  function base64ToBlob(b64, type) {
-    const bin = atob(b64);
-    const arr = Uint8Array.from([...bin].map(c => c.charCodeAt(0)));
-    return new Blob([arr], { type: type || 'image/jpeg' });
-  }
-
-  $('#export-btn').addEventListener('click', async () => {
-    toast('エクスポート準備中…');
-    const entries = await DiaryDB.getAllEntries();
-    const photos = await DiaryDB.getAllPhotos();
-    const photoData = [];
-    for (const p of photos) {
-      photoData.push({ id: p.id, date: p.date, createdAt: p.createdAt, base64: await blobToBase64(p.blob) });
-    }
-    const data = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), entries, photos: photoData });
-    const blob = new Blob([data], { type: 'application/json' });
+  $('#export-btn').addEventListener('click', () => {
+    // Cookie認証なので直接ダウンロードできる
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `hidamari-diary-${todayStr()}.json`;
+    a.href = '/api/export';
+    a.download = '';
     a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   });
 
   $('#import-input').addEventListener('change', async (e) => {
@@ -580,36 +511,81 @@
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (!data.entries) throw new Error();
-      for (const entry of data.entries) await DiaryDB.putEntry(entry);
-      for (const p of (data.photos || [])) {
-        await DiaryDB.putPhoto({ id: p.id, date: p.date, createdAt: p.createdAt, blob: base64ToBlob(p.base64) });
-      }
-      toast(`${data.entries.length}件の日記を読み込みました`);
+      const result = await Api.import(data);
+      toast(`${result.entries}件の日記を読み込みました`);
       renderSettings();
-    } catch {
-      toast('ファイルを読み込めませんでした');
+    } catch (err) {
+      handleError(err.message ? err : new Error('ファイルを読み込めませんでした'));
     }
   });
 
+  // ===== 旧バージョン(IndexedDB)からの移行 =====
+  async function migrateLocalData() {
+    if (localStorage.getItem('migrated-to-server')) return;
+    try {
+      if (typeof DiaryDB === 'undefined') return;
+      const localEntries = await DiaryDB.getAllEntries();
+      if (!localEntries.length) {
+        localStorage.setItem('migrated-to-server', '1');
+        return;
+      }
+      const serverEntries = await Api.getEntries();
+      const serverDates = new Set(serverEntries.map(e => e.date));
+      let migrated = 0;
+      for (const entry of localEntries) {
+        if (serverDates.has(entry.date)) continue;
+        const newIds = [];
+        for (const pid of (entry.photoIds || [])) {
+          const photo = await DiaryDB.getPhoto(pid);
+          if (!photo) continue;
+          const base64 = await blobToBase64(photo.blob);
+          const { id } = await Api.uploadPhoto(entry.date, base64, 'image/jpeg');
+          newIds.push(id);
+        }
+        await Api.putEntry({
+          date: entry.date, title: entry.title || '', text: entry.text || '',
+          mood: entry.mood || null, photoIds: newIds,
+        });
+        migrated++;
+      }
+      localStorage.setItem('migrated-to-server', '1');
+      if (migrated > 0) {
+        toast(`この端末の日記${migrated}件をサーバーに移行しました`);
+        renderCalendar();
+      }
+    } catch (e) {
+      console.warn('移行をスキップ:', e.message);
+    }
+  }
+
   // ===== 起動 =====
+  async function afterLogin() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('write')) {
+      history.replaceState(null, '', '/');
+      await openEditor(todayStr());
+    } else {
+      showView('calendar');
+    }
+    migrateLocalData();
+  }
+
   async function init() {
-    // Service Worker 登録
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW登録失敗:', err));
     }
-    // パスコードロック
-    if (localStorage.getItem(PIN_KEY)) {
-      await showLogin('verify', 'パスコードを入力してください');
-    } else {
-      hideLogin();
-    }
-    // 通知から「?date=...」で開かれたとき
-    const params = new URLSearchParams(location.search);
-    if (params.get('write')) {
-      openEditor(todayStr());
-    } else {
-      showView('calendar');
+    try {
+      const { setup, authed } = await Api.status();
+      if (!setup) {
+        showLogin('setup');
+      } else if (!authed) {
+        showLogin('login');
+      } else {
+        hideLogin();
+        await afterLogin();
+      }
+    } catch (e) {
+      showLogin('login', 'サーバーに接続できません。通信環境を確認してください');
     }
   }
 

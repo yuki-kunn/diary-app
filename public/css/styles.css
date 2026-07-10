@@ -64,34 +64,26 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .login-sub { color: var(--ink-soft); font-size: 0.9rem; min-height: 1.4em; }
 .login-sub.error { color: var(--danger); }
 
-.pin-dots { display: flex; justify-content: center; gap: 16px; margin: 26px 0; }
-.pin-dots span {
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid var(--terracotta);
-  transition: background 0.15s;
+.login-form {
+  display: flex; flex-direction: column; gap: 12px; margin-top: 22px;
 }
-.pin-dots span.filled { background: var(--terracotta); }
-.pin-dots.shake { animation: shake 0.35s; }
+.login-input {
+  width: 100%; border: 1px solid var(--sand); outline: none;
+  background: var(--surface); border-radius: 14px;
+  padding: 14px 16px; font-size: 1rem; color: var(--ink);
+  font-family: inherit;
+}
+.login-input:focus { border-color: var(--terracotta); }
+.login-btn { width: 100%; padding: 14px; font-size: 1rem; }
+.login-form.shake { animation: shake 0.35s; }
 @keyframes shake {
   0%,100% { transform: translateX(0); }
   25% { transform: translateX(-8px); }
   75% { transform: translateX(8px); }
 }
 
-.pin-pad {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  max-width: 280px; margin: 0 auto;
-}
-.pin-pad button {
-  height: 68px; border-radius: 50%;
-  background: var(--surface);
-  font-size: 1.5rem; font-weight: 600; color: var(--ink);
-  box-shadow: var(--shadow);
-  transition: transform 0.08s, background 0.15s;
-}
-.pin-pad button:active { transform: scale(0.93); background: var(--sand); }
-.pin-pad .pin-blank { background: transparent; box-shadow: none; cursor: default; }
-.pin-pad .pin-del { font-size: 1.2rem; background: transparent; box-shadow: none; }
+.pw-change { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.pw-change .btn-ghost { align-self: flex-start; }
 
 /* ===== カレンダー ===== */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }

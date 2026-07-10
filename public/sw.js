@@ -1,10 +1,11 @@
 /* ひだまり日記 Service Worker */
-const CACHE_NAME = 'hidamari-v1';
+const CACHE_NAME = 'hidamari-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/css/styles.css',
   '/js/app.js',
+  '/js/api.js',
   '/js/db.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
@@ -26,7 +27,7 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// アプリシェルはキャッシュ優先、APIはネットワークのみ
+// アプリシェルはキャッシュ優先、/api/ はネットワークのみ(ブラウザHTTPキャッシュに任せる)
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
@@ -44,50 +45,19 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-// ---- プッシュ通知 ----
-// 22時のリマインド: IndexedDBを見て今日の日記があれば表示しない
-function hasEntryToday(dateStr) {
-  return new Promise((resolve) => {
-    const req = indexedDB.open('hidamari-diary');
-    req.onsuccess = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('entries')) { resolve(false); return; }
-      const get = db.transaction('entries').objectStore('entries').get(dateStr);
-      get.onsuccess = () => resolve(!!get.result);
-      get.onerror = () => resolve(false);
-    };
-    req.onerror = () => resolve(false);
-  });
-}
-
+// ---- プッシュ通知(22時のリマインド判定はサーバー側で実施) ----
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data.json(); } catch { data = { title: 'ひだまり日記', body: e.data ? e.data.text() : '' }; }
-
-  const show = () => self.registration.showNotification(data.title || 'ひだまり日記', {
-    body: data.body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    tag: data.type === 'reminder' ? 'daily-reminder' : undefined,
-    data: { url: data.type === 'reminder' ? '/?write=1' : '/' },
-  });
-
-  if (data.type === 'reminder' && data.date) {
-    e.waitUntil(
-      hasEntryToday(data.date).then(exists => {
-        if (!exists) return show();
-        // すでに書いていた場合も控えめな通知(Chromeの userVisibleOnly 制約のため)
-        return self.registration.showNotification('ひだまり日記', {
-          body: '今日の日記は登録済みです。おやすみなさい 🌙',
-          icon: '/icons/icon-192.png',
-          tag: 'daily-reminder',
-          silent: true,
-        });
-      })
-    );
-  } else {
-    e.waitUntil(show());
-  }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'ひだまり日記', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.type === 'reminder' ? 'daily-reminder' : undefined,
+      data: { url: data.type === 'reminder' ? '/?write=1' : '/' },
+    })
+  );
 });
 
 self.addEventListener('notificationclick', (e) => {
