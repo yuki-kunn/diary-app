@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "diary",
+      "runtimeExecutable": "wsl.exe",
+      "runtimeArgs": ["-d", "Ubuntu", "--", "bash", "-lc", "cd ~/diary-app && node server.js"],
+      "port": 3000
+    }
+  ]
+}

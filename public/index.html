@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ひだまり日記</title>
+  <meta name="description" content="毎日の出来事や写真を保存できる、あたたかい日記帳アプリ">
+  <meta name="theme-color" content="#f7f1e5">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ひだまり日記">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- ログイン -->
+  <section id="view-login" class="view login-view hidden">
+    <div class="login-card">
+      <div class="login-logo">🌿</div>
+      <h1 class="login-title">ひだまり日記</h1>
+      <p class="login-sub" id="login-message">パスコードを入力してください</p>
+      <div class="pin-dots" id="pin-dots">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="pin-pad" id="pin-pad">
+        <button data-key="1">1</button>
+        <button data-key="2">2</button>
+        <button data-key="3">3</button>
+        <button data-key="4">4</button>
+        <button data-key="5">5</button>
+        <button data-key="6">6</button>
+        <button data-key="7">7</button>
+        <button data-key="8">8</button>
+        <button data-key="9">9</button>
+        <button class="pin-blank" disabled></button>
+        <button data-key="0">0</button>
+        <button data-key="del" class="pin-del">⌫</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- アプリ本体 -->
+  <div id="app-shell" class="hidden">
+    <header class="app-header">
+      <div class="app-header-inner">
+        <span class="brand">🌿 ひだまり日記</span>
+        <span class="header-date" id="header-date"></span>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- カレンダー -->
+      <section id="view-calendar" class="view">
+        <div class="cal-head">
+          <button class="icon-btn" id="cal-prev" aria-label="前の月">‹</button>
+          <h2 class="cal-title" id="cal-title">2026年7月</h2>
+          <button class="icon-btn" id="cal-next" aria-label="次の月">›</button>
+          <button class="btn-today" id="cal-today">今日</button>
+        </div>
+        <div class="cal-weekdays">
+          <span class="sun">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="sat">土</span>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend">
+          <span class="legend-dot"></span> 日記あり
+          <span class="legend-photo">📷</span> 写真あり
+        </div>
+        <button class="fab" id="fab-write" aria-label="今日の日記を書く">✏️</button>
+      </section>
+
+      <!-- 日記作成・編集 -->
+      <section id="view-editor" class="view hidden">
+        <div class="editor-head">
+          <button class="icon-btn" id="editor-back" aria-label="戻る">‹</button>
+          <h2 class="editor-date" id="editor-date"></h2>
+          <button class="btn-primary" id="editor-save">保存</button>
+        </div>
+        <div class="editor-body">
+          <div class="mood-row" id="mood-row">
+            <span class="mood-label">きょうの気分</span>
+            <div class="mood-options">
+              <button data-mood="😊">😊</button>
+              <button data-mood="😌">😌</button>
+              <button data-mood="😐">😐</button>
+              <button data-mood="😢">😢</button>
+              <button data-mood="😠">😠</button>
+            </div>
+          </div>
+          <input type="text" id="editor-title" class="editor-title" placeholder="タイトル(任意)" maxlength="60">
+          <textarea id="editor-text" class="editor-text" placeholder="今日はどんな一日でしたか?"></textarea>
+          <div class="photo-section">
+            <label class="photo-add" for="photo-input">
+              <span>📷 写真を追加</span>
+              <input type="file" id="photo-input" accept="image/*" multiple hidden>
+            </label>
+            <div class="photo-grid" id="editor-photos"></div>
+          </div>
+          <button class="btn-danger-ghost hidden" id="editor-delete">この日の日記を削除</button>
+        </div>
+      </section>
+
+      <!-- ギャラリー -->
+      <section id="view-gallery" class="view hidden">
+        <h2 class="page-title">ギャラリー</h2>
+        <p class="page-sub" id="gallery-count"></p>
+        <div class="gallery-grid" id="gallery-grid"></div>
+        <div class="empty-state hidden" id="gallery-empty">
+          <div class="empty-icon">🖼️</div>
+          <p>まだ写真がありません。<br>日記に写真を追加すると、ここに集まります。</p>
+        </div>
+      </section>
+
+      <!-- アカウント設定 -->
+      <section id="view-settings" class="view hidden">
+        <h2 class="page-title">設定</h2>
+
+        <div class="card">
+          <h3 class="card-title">🔔 通知</h3>
+          <p class="card-desc">毎日22時を過ぎても日記が書かれていないときに、リマインド通知を送ります。</p>
+          <label class="switch-row">
+            <span>リマインド通知</span>
+            <input type="checkbox" id="notify-toggle" class="switch">
+          </label>
+          <p class="hint" id="notify-hint"></p>
+          <button class="btn-ghost" id="notify-test">テスト通知を送る</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">🔒 パスコード</h3>
+          <p class="card-desc">アプリを開くときのパスコード(4桁)を設定できます。</p>
+          <label class="switch-row">
+            <span>パスコードロック</span>
+            <input type="checkbox" id="lock-toggle" class="switch">
+          </label>
+          <button class="btn-ghost hidden" id="lock-change">パスコードを変更</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">💾 データ</h3>
+          <p class="card-desc" id="storage-info">保存容量を計算中…</p>
+          <div class="btn-row">
+            <button class="btn-ghost" id="export-btn">エクスポート</button>
+            <label class="btn-ghost" for="import-input">インポート
+              <input type="file" id="import-input" accept="application/json" hidden>
+            </label>
+          </div>
+        </div>
+
+        <p class="app-version">ひだまり日記 v1.0 — データはこの端末の中にだけ保存されます</p>
+      </section>
+    </main>
+
+    <!-- ボトムナビ -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-view="calendar">
+        <span class="nav-icon">📅</span><span class="nav-label">カレンダー</span>
+      </button>
+      <button class="nav-btn" data-view="gallery">
+        <span class="nav-icon">🖼️</span><span class="nav-label">ギャラリー</span>
+      </button>
+      <button class="nav-btn" data-view="settings">
+        <span class="nav-icon">⚙️</span><span class="nav-label">設定</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ライトボックス -->
+  <div id="lightbox" class="lightbox hidden">
+    <button class="lightbox-close" id="lightbox-close">✕</button>
+    <img id="lightbox-img" alt="">
+    <div class="lightbox-caption" id="lightbox-caption"></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/js/db.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

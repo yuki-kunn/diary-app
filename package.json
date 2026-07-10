@@ -1,0 +1,14 @@
+{
+  "name": "diary-app",
+  "version": "1.0.0",
+  "description": "毎日の出来事や写真を保存できる日記帳PWA",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "web-push": "^3.6.7"
+  }
+}
