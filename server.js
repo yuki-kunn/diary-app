@@ -369,6 +369,6 @@ cron.schedule('0 22 * * *', async () => {
   }
 }, { timezone: 'Asia/Tokyo' });
 
-app.listen(PORT, () => {
-  console.log(`ひだまり日記 サーバー起動: http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`ひだまり日記 サーバー起動: port=${PORT}`);
 });
