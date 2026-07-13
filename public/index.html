@@ -21,13 +21,16 @@
     <div class="login-card">
       <div class="login-logo">🌿</div>
       <h1 class="login-title">ひだまり日記</h1>
-      <p class="login-sub" id="login-message">パスワードを入力してください</p>
+      <p class="login-sub" id="login-message">ユーザー名とパスワードを入力してください</p>
       <form id="login-form" class="login-form">
+        <input type="text" id="login-username" class="login-input"
+               placeholder="ユーザー名" autocomplete="username" maxlength="20" required>
         <input type="password" id="login-password" class="login-input"
                placeholder="パスワード" autocomplete="current-password" minlength="6" required>
         <input type="password" id="login-password2" class="login-input hidden"
                placeholder="パスワード(確認)" autocomplete="new-password" minlength="6">
         <button type="submit" class="btn-primary login-btn" id="login-submit">ログイン</button>
+        <button type="button" class="login-link" id="login-switch">アカウントを新規作成</button>
       </form>
     </div>
   </section>
@@ -120,7 +123,7 @@
 
         <div class="card">
           <h3 class="card-title">🔒 アカウント</h3>
-          <p class="card-desc">日記はサーバーのデータベースに保存され、パスワードで保護されています。</p>
+          <p class="card-desc" id="account-info">日記はサーバーのデータベースに保存され、アカウントごとに分離されています。</p>
           <div class="pw-change" id="pw-change-form">
             <input type="password" id="pw-current" class="login-input" placeholder="現在のパスワード" autocomplete="current-password">
             <input type="password" id="pw-next" class="login-input" placeholder="新しいパスワード(6文字以上)" autocomplete="new-password">
@@ -140,7 +143,7 @@
           </div>
         </div>
 
-        <p class="app-version">ひだまり日記 v2.0 — データはサーバーのデータベースに保存されます</p>
+        <p class="app-version">ひだまり日記 v2.1 — データはサーバーのデータベースに保存されます</p>
       </section>
     </main>
 

@@ -74,21 +74,27 @@
   });
 
   // ===== ログイン =====
-  let loginMode = 'login'; // login | setup
+  let loginMode = 'login'; // login | register
+  let currentUsername = null;
 
   function showLogin(mode, message) {
     loginMode = mode;
     $('#login-message').textContent = message ||
-      (mode === 'setup' ? 'はじめまして。パスワードを設定してください(6文字以上)' : 'パスワードを入力してください');
+      (mode === 'register' ? '新しいアカウントを作成します' : 'ユーザー名とパスワードを入力してください');
     $('#login-message').classList.remove('error');
     $('#login-password').value = '';
     $('#login-password2').value = '';
-    $('#login-password2').classList.toggle('hidden', mode !== 'setup');
-    $('#login-password2').required = mode === 'setup';
-    $('#login-submit').textContent = mode === 'setup' ? 'はじめる' : 'ログイン';
+    $('#login-password2').classList.toggle('hidden', mode !== 'register');
+    $('#login-password2').required = mode === 'register';
+    $('#login-password').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+    $('#login-submit').textContent = mode === 'register' ? 'アカウント作成' : 'ログイン';
+    $('#login-switch').textContent = mode === 'register' ? 'ログインに戻る' : 'アカウントを新規作成';
     $('#view-login').classList.remove('hidden');
     $('#app-shell').classList.add('hidden');
   }
+  $('#login-switch').addEventListener('click', () => {
+    showLogin(loginMode === 'register' ? 'login' : 'register');
+  });
   function hideLogin() {
     $('#view-login').classList.add('hidden');
     $('#app-shell').classList.remove('hidden');
@@ -104,20 +110,23 @@
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const username = $('#login-username').value.trim();
     const password = $('#login-password').value;
     const btn = $('#login-submit');
     btn.disabled = true;
     try {
-      if (loginMode === 'setup') {
+      let result;
+      if (loginMode === 'register') {
         if (password !== $('#login-password2').value) {
           loginError('パスワードが一致しません');
           return;
         }
-        await Api.setup(password);
-        toast('パスワードを設定しました 🔒');
+        result = await Api.register(username, password);
+        toast(`ようこそ、${result.username}さん 🌿`);
       } else {
-        await Api.login(password);
+        result = await Api.login(username, password);
       }
+      currentUsername = result.username;
       hideLogin();
       await afterLogin();
     } catch (err) {
@@ -442,6 +451,9 @@
       hint.textContent = '';
     }
 
+    if (currentUsername) {
+      $('#account-info').textContent = `${currentUsername} さんとしてログイン中。日記はアカウントごとに分離して保存されます。`;
+    }
     try {
       const entries = await Api.getEntries();
       const photos = await Api.getPhotosMeta();
@@ -575,14 +587,15 @@
       navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW登録失敗:', err));
     }
     try {
-      const { setup, authed } = await Api.status();
-      if (!setup) {
-        showLogin('setup');
-      } else if (!authed) {
-        showLogin('login');
-      } else {
+      const { hasUsers, authed, username } = await Api.status();
+      if (authed) {
+        currentUsername = username;
         hideLogin();
         await afterLogin();
+      } else if (!hasUsers) {
+        showLogin('register', 'ようこそ!最初のアカウントを作成してください');
+      } else {
+        showLogin('login');
       }
     } catch (e) {
       showLogin('login', 'サーバーに接続できません。通信環境を確認してください');

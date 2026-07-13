@@ -24,8 +24,8 @@ const Api = (() => {
   return {
     // 認証
     status: () => req('/api/auth/status'),
-    setup: (password) => req('/api/auth/setup', { method: 'POST', body: { password } }),
-    login: (password) => req('/api/auth/login', { method: 'POST', body: { password } }),
+    register: (username, password) => req('/api/auth/register', { method: 'POST', body: { username, password } }),
+    login: (username, password) => req('/api/auth/login', { method: 'POST', body: { username, password } }),
     logout: () => req('/api/auth/logout', { method: 'POST' }),
     changePassword: (current, next) => req('/api/auth/change', { method: 'POST', body: { current, next } }),
 

@@ -1,5 +1,5 @@
 /* ひだまり日記 Service Worker */
-const CACHE_NAME = 'hidamari-v2';
+const CACHE_NAME = 'hidamari-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
