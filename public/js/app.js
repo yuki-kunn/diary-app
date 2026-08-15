@@ -506,13 +506,6 @@
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  $('#obsidian-export-btn').addEventListener('click', () => {
-    const a = document.createElement('a');
-    a.href = '/api/export/markdown';
-    a.download = '';
-    a.click();
-  });
-
   $('#token-create-btn').addEventListener('click', async () => {
     const nameInput = $('#token-name-input');
     const name = nameInput.value.trim() || 'Obsidian連携';
@@ -533,36 +526,6 @@
     } catch {
       toast('コピーできませんでした。手動で選択してください');
     }
-  });
-
-  $('#obsidian-script-btn').addEventListener('click', () => {
-    const origin = location.origin;
-    const script = `#!/bin/bash
-# ひだまり日記 → Obsidian Vault 同期スクリプト
-# 使い方: sync-obsidian.sh <VaultのVault内フォルダパス>
-# 例:     ./sync-obsidian.sh ~/Documents/MyVault/hidamari
-#
-# cronで毎日自動実行する例(6時に同期):
-#   0 6 * * * /path/to/sync-obsidian.sh ~/Documents/MyVault/hidamari >> ~/sync-obsidian.log 2>&1
-
-set -e
-DEST="\${1:?同期先フォルダを指定してください}"
-API_BASE="${origin}"
-TOKEN="ここに設定画面で発行したトークンを貼り付け"  # hdmr_... 形式
-
-mkdir -p "$DEST"
-TMPZIP=$(mktemp)
-curl -sSf -H "Authorization: Bearer $TOKEN" "$API_BASE/api/export/markdown" -o "$TMPZIP"
-unzip -o -q "$TMPZIP" -d "$DEST"
-rm -f "$TMPZIP"
-echo "同期完了: $DEST/diary"
-`;
-    const blob = new Blob([script], { type: 'text/x-sh' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'sync-obsidian.sh';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   });
 
   $('#notify-toggle').addEventListener('change', async (e) => {

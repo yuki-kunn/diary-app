@@ -11,7 +11,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
-const archiver = require('archiver');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -413,61 +412,42 @@ app.post('/api/import', requireAuth, (req, res) => {
   res.json({ ok: true, entries: entries.length, photos: (photos || []).length });
 });
 
-// ---- Obsidian連携: Markdown/ZIP エクスポート ----
-// フロントマターはDataview/Tasksプラグインと親和性のある形式にする
+// ---- Obsidianプラグイン連携 ----
+// Obsidianプラグイン(obsidian-plugin/)が定期ポーリングするmachine-to-machine API。
+// JSON1本で全件返し、ノート化(Markdown組み立て・ファイル突き合わせ)はプラグイン側で行う。
+// 認証はrequireAuth(Cookieセッション or PAT)を共通で通す。
 function moodLabel(mood) {
   const map = { '😊': 'happy', '😌': 'calm', '😐': 'neutral', '😢': 'sad', '😠': 'angry' };
   return map[mood] || '';
 }
-function escapeYaml(s) {
-  return String(s || '').replace(/"/g, '\\"');
-}
-function entryToMarkdown(row, photoFilenames) {
-  const photoIds = JSON.parse(row.photo_ids || '[]');
-  const lines = [];
-  lines.push('---');
-  lines.push(`date: ${row.date}`);
-  if (row.title) lines.push(`title: "${escapeYaml(row.title)}"`);
-  if (row.mood) lines.push(`mood: ${moodLabel(row.mood)}`);
-  if (row.mood) lines.push(`mood_emoji: "${row.mood}"`);
-  lines.push('tags: [diary]');
-  if (photoIds.length) lines.push(`photos: [${photoIds.map((id, i) => `"${photoFilenames[i]}"`).join(', ')}]`);
-  lines.push('---');
-  lines.push('');
-  if (row.title) lines.push(`# ${row.title}`);
-  lines.push('');
-  if (row.text) { lines.push(row.text); lines.push(''); }
-  if (photoIds.length) {
-    lines.push('## 写真');
-    photoFilenames.forEach(fn => lines.push(`![[${fn}]]`));
-    lines.push('');
-  }
-  return lines.join('\n');
-}
 
-app.get('/api/export/markdown', requireAuth, (req, res) => {
-  const since = /^\d{4}-\d{2}-\d{2}$/.test(req.query.since || '') ? req.query.since : null;
-  const rows = since
-    ? db.prepare('SELECT * FROM entries WHERE user_id = ? AND date >= ? ORDER BY date').all(req.userId, since)
-    : db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY date').all(req.userId);
+app.get('/api/obsidian/export', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY date').all(req.userId);
+  const notes = rows.map(row => ({
+    id: row.date, // 日記は1日1件なのでdateをそのままidとして使う(frontmatterでの突き合わせキー)
+    date: row.date,
+    title: row.title || '',
+    text: row.text || '',
+    mood: moodLabel(row.mood) || null,
+    moodEmoji: row.mood || null,
+    photoIds: JSON.parse(row.photo_ids || '[]'),
+    updatedAt: row.updated_at,
+  }));
+  res.json({
+    exportedAt: new Date().toISOString(),
+    count: notes.length,
+    ids: notes.map(n => n.id), // 現存する全dateのリスト。プラグイン側の削除同期に使う
+    notes,
+  });
+});
 
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="hidamari-diary-obsidian-${todayJST()}.zip"`);
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.on('error', (err) => { console.error('[export/markdown]', err); res.status(500).end(); });
-  archive.pipe(res);
-
-  for (const row of rows) {
-    const photoIds = JSON.parse(row.photo_ids || '[]');
-    const photoFilenames = photoIds.map((id, i) => `${row.date}-${i + 1}.jpg`);
-    const md = entryToMarkdown(row, photoFilenames);
-    archive.append(md, { name: `diary/${row.date}.md` });
-    photoIds.forEach((id, i) => {
-      const photo = db.prepare('SELECT data FROM photos WHERE id = ? AND user_id = ?').get(id, req.userId);
-      if (photo) archive.append(photo.data, { name: `diary/attachments/${photoFilenames[i]}` });
-    });
-  }
-  archive.finalize();
+// 写真は個別バイナリ配信(JSONにBase64同梱すると巨大化するため分離)
+app.get('/api/obsidian/photo/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT mime, data FROM photos WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!row) return res.status(404).end();
+  res.setHeader('Content-Type', row.mime);
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(row.data);
 });
 
 // ---- プッシュ通知 ----

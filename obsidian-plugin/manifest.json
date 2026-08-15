@@ -1,0 +1,10 @@
+{
+	"id": "hidamari-sync",
+	"name": "Hidamari Diary Sync",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "ひだまり日記の日記・写真をVaultに定期同期する読み取り専用インテグレーション。",
+	"author": "Hidamari Diary",
+	"authorUrl": "",
+	"isDesktopOnly": false
+}

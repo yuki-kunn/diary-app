@@ -135,15 +135,12 @@
         <div class="card">
           <h3 class="card-title">🔗 Obsidian連携</h3>
           <p class="card-desc">
-            日記をMarkdown形式(フロントマター付き)でエクスポートできます。<code>Dataview</code>プラグイン等でそのままAI活用の資料として使えます。
+            専用の<strong>Obsidianプラグイン</strong>で、日記をVaultに自動同期できます。Obsidian起動中は指定間隔で自動的にノート化され、
+            <code>Dataview</code>プラグイン等でそのままAI活用の資料として使えます。
           </p>
-          <div class="btn-row">
-            <button class="btn-ghost" id="obsidian-export-btn">Obsidian用ZIPを今すぐダウンロード</button>
-          </div>
 
-          <h4 class="card-subtitle">自動同期(アクセストークン)</h4>
+          <h4 class="card-subtitle">1. アクセストークンを発行</h4>
           <p class="card-desc">
-            端末を経由せず、PC上のスクリプトから定期的にVaultへ取り込みたい場合はアクセストークンを発行してください。
             <strong>トークンは表示時にしか見られません。第三者に渡すと日記を読み取られるので取り扱いに注意してください。</strong>
           </p>
           <div class="token-list" id="token-list"></div>
@@ -156,7 +153,12 @@
             <code class="token-value" id="token-value"></code>
             <button class="btn-ghost" id="token-copy-btn">コピー</button>
           </div>
-          <button class="btn-ghost" id="obsidian-script-btn">同期スクリプトをダウンロード(sync-obsidian.sh)</button>
+
+          <h4 class="card-subtitle">2. プラグインをインストール</h4>
+          <p class="card-desc">
+            <code>obsidian-plugin/</code> フォルダをビルドし、Vaultの <code>.obsidian/plugins/hidamari-sync/</code> に配置してください。
+            設定タブに「バックエンドURL」(このアプリのURL)と、上で発行したトークンを入力すれば同期が始まります。詳しい手順はプラグイン同梱のREADMEをご覧ください。
+          </p>
         </div>
 
         <div class="card">
