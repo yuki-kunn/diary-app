@@ -284,7 +284,28 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   padding: 10px 16px; border-radius: 12px; font-size: 0.88rem; font-weight: 600;
   cursor: pointer; margin-top: 4px;
 }
-.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.card-subtitle { font-size: 0.9rem; margin: 16px 0 4px; color: var(--ink); }
+.card-desc code {
+  background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-size: 0.82em;
+}
+.token-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.token-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--surface-2); border-radius: 12px; padding: 10px 12px;
+}
+.token-row-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; }
+.token-row-info .hint { margin: 0; }
+.token-row-del { padding: 6px 12px; font-size: 0.78rem; flex-shrink: 0; }
+.token-name-input { flex: 1; min-width: 140px; padding: 10px 12px; }
+.token-reveal {
+  background: var(--sage-soft); border-radius: 12px; padding: 12px; margin-top: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.token-value {
+  display: block; word-break: break-all; background: var(--surface);
+  padding: 10px; border-radius: 8px; font-size: 0.82rem; color: var(--terracotta-deep);
+}
 .app-version { text-align: center; color: #b5a992; font-size: 0.75rem; margin-top: 24px; }
 
 /* ===== ボトムナビ ===== */

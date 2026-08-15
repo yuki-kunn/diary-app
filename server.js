@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
+const archiver = require('archiver');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -78,6 +79,7 @@ db.exec(`
     text TEXT DEFAULT '',
     mood TEXT,
     photo_ids TEXT DEFAULT '[]',
+    tasks TEXT DEFAULT '[]',
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, date)
   );
@@ -94,6 +96,13 @@ db.exec(`
     endpoint TEXT PRIMARY KEY,
     json TEXT NOT NULL,
     user_id INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS api_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT DEFAULT '',
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER
   );
 `);
 
@@ -184,8 +193,26 @@ function getAuth(req) {
   }
   return row;
 }
+// ===== 個人用アクセストークン(PAT) — Obsidian等の外部スクリプト連携用 =====
+// 形式: hdmr_<32byte hex>。ハッシュ(SHA-256)のみDBに保存し、平文は発行時にしか見せない。
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+function getAuthByToken(req) {
+  const header = req.headers.authorization || '';
+  const match = header.match(/^Bearer\s+(hdmr_[a-f0-9]{64})$/);
+  if (!match) return null;
+  const tokenHash = hashToken(match[1]);
+  const row = db.prepare(`
+    SELECT at.user_id AS userId, u.username FROM api_tokens at
+    JOIN users u ON u.id = at.user_id WHERE at.token = ?
+  `).get(tokenHash);
+  if (!row) return null;
+  db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE token = ?').run(Date.now(), tokenHash);
+  return row;
+}
 function requireAuth(req, res, next) {
-  const auth = getAuth(req);
+  const auth = getAuth(req) || getAuthByToken(req);
   if (!auth) return res.status(401).json({ error: 'ログインが必要です' });
   req.userId = auth.userId;
   next();
@@ -262,11 +289,35 @@ app.post('/api/auth/change', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- 個人用アクセストークン管理 ----
+app.get('/api/tokens', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT token, name, created_at AS createdAt, last_used_at AS lastUsedAt FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC').all(req.userId);
+  // 一覧には末尾8文字のみ表示(平文は発行時のみ)
+  res.json(rows.map(r => ({ id: r.token.slice(-8), name: r.name, createdAt: r.createdAt, lastUsedAt: r.lastUsedAt })));
+});
+
+app.post('/api/tokens', requireAuth, (req, res) => {
+  const name = (req.body.name || 'Obsidian連携').slice(0, 50);
+  const token = 'hdmr_' + crypto.randomBytes(32).toString('hex');
+  db.prepare('INSERT INTO api_tokens (token, user_id, name, created_at) VALUES (?, ?, ?, ?)')
+    .run(hashToken(token), req.userId, name, Date.now());
+  res.json({ token, name }); // 平文トークンはこのレスポンスでのみ返す
+});
+
+app.delete('/api/tokens/:id', requireAuth, (req, res) => {
+  // idは末尾8文字。同じuser_id内で末尾一致するトークンを削除
+  const rows = db.prepare('SELECT token FROM api_tokens WHERE user_id = ?').all(req.userId);
+  const target = rows.find(r => r.token.endsWith(req.params.id));
+  if (target) db.prepare('DELETE FROM api_tokens WHERE token = ?').run(target.token);
+  res.json({ ok: true });
+});
+
 // ---- 日記 ----
 function rowToEntry(row) {
   return {
     date: row.date, title: row.title, text: row.text, mood: row.mood,
-    photoIds: JSON.parse(row.photo_ids || '[]'), updatedAt: row.updated_at,
+    photoIds: JSON.parse(row.photo_ids || '[]'),
+    updatedAt: row.updated_at,
   };
 }
 
@@ -360,6 +411,63 @@ app.post('/api/import', requireAuth, (req, res) => {
   });
   run();
   res.json({ ok: true, entries: entries.length, photos: (photos || []).length });
+});
+
+// ---- Obsidian連携: Markdown/ZIP エクスポート ----
+// フロントマターはDataview/Tasksプラグインと親和性のある形式にする
+function moodLabel(mood) {
+  const map = { '😊': 'happy', '😌': 'calm', '😐': 'neutral', '😢': 'sad', '😠': 'angry' };
+  return map[mood] || '';
+}
+function escapeYaml(s) {
+  return String(s || '').replace(/"/g, '\\"');
+}
+function entryToMarkdown(row, photoFilenames) {
+  const photoIds = JSON.parse(row.photo_ids || '[]');
+  const lines = [];
+  lines.push('---');
+  lines.push(`date: ${row.date}`);
+  if (row.title) lines.push(`title: "${escapeYaml(row.title)}"`);
+  if (row.mood) lines.push(`mood: ${moodLabel(row.mood)}`);
+  if (row.mood) lines.push(`mood_emoji: "${row.mood}"`);
+  lines.push('tags: [diary]');
+  if (photoIds.length) lines.push(`photos: [${photoIds.map((id, i) => `"${photoFilenames[i]}"`).join(', ')}]`);
+  lines.push('---');
+  lines.push('');
+  if (row.title) lines.push(`# ${row.title}`);
+  lines.push('');
+  if (row.text) { lines.push(row.text); lines.push(''); }
+  if (photoIds.length) {
+    lines.push('## 写真');
+    photoFilenames.forEach(fn => lines.push(`![[${fn}]]`));
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+app.get('/api/export/markdown', requireAuth, (req, res) => {
+  const since = /^\d{4}-\d{2}-\d{2}$/.test(req.query.since || '') ? req.query.since : null;
+  const rows = since
+    ? db.prepare('SELECT * FROM entries WHERE user_id = ? AND date >= ? ORDER BY date').all(req.userId, since)
+    : db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY date').all(req.userId);
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="hidamari-diary-obsidian-${todayJST()}.zip"`);
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', (err) => { console.error('[export/markdown]', err); res.status(500).end(); });
+  archive.pipe(res);
+
+  for (const row of rows) {
+    const photoIds = JSON.parse(row.photo_ids || '[]');
+    const photoFilenames = photoIds.map((id, i) => `${row.date}-${i + 1}.jpg`);
+    const md = entryToMarkdown(row, photoFilenames);
+    archive.append(md, { name: `diary/${row.date}.md` });
+    photoIds.forEach((id, i) => {
+      const photo = db.prepare('SELECT data FROM photos WHERE id = ? AND user_id = ?').get(id, req.userId);
+      if (photo) archive.append(photo.data, { name: `diary/attachments/${photoFilenames[i]}` });
+    });
+  }
+  archive.finalize();
 });
 
 // ---- プッシュ通知 ----

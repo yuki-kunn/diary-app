@@ -12,6 +12,7 @@
 - **設定** — 通知のオン/オフ、パスワード変更、データのエクスポート/インポート
 - **PWA** — ホーム画面に追加可能。アプリシェルはオフラインキャッシュ
 - **リマインド通知** — 毎日22時(JST)にその日の日記が未登録なら、登録済みの全端末へプッシュ通知
+- **Obsidian連携** — 日記をフロントマター付きMarkdown+写真のZIPでエクスポート。個人用アクセストークンを発行すればスクリプトから自動同期も可能
 
 ## 技術構成
 
@@ -73,3 +74,28 @@ fly deploy
 
 - 設定 → エクスポート で全日記+写真をJSONでダウンロード(インポートで復元)
 - またはサーバーの `data/diary.db` をそのままコピー
+
+## Obsidian連携
+
+日記をObsidian VaultにMarkdownとして取り込めます。日記1件 = 1ノート(`YYYY-MM-DD.md`)、フロントマターに`date`/`title`/`mood`/`tags`/`photos`を含むので、Dataviewでの一覧・検索や、Vault全体をAI(Claude Projects等)の資料として渡す用途に使えます。
+
+### 手動エクスポート
+
+設定 → Obsidian連携 →「Obsidian用ZIPを今すぐダウンロード」。ZIPを展開してVault内のフォルダにコピーするだけです。
+
+### 自動同期(PC側でcron実行)
+
+1. 設定 → Obsidian連携 →「トークンを発行」→ 表示された `hdmr_...` をコピー(**この画面を閉じると二度と表示されません**)
+2. 「同期スクリプトをダウンロード」→ `sync-obsidian.sh` を取得
+3. スクリプト内の `TOKEN` にコピーしたトークンを貼り付け
+4. 実行:
+   ```bash
+   chmod +x sync-obsidian.sh
+   ./sync-obsidian.sh ~/Documents/MyVault/hidamari
+   ```
+5. 定期実行したい場合は `crontab -e` で登録:
+   ```
+   0 6 * * * /path/to/sync-obsidian.sh ~/Documents/MyVault/hidamari >> ~/sync-obsidian.log 2>&1
+   ```
+
+トークンは設定画面からいつでも「失効」できます。第三者に渡すと日記を読み取られるため、Gitリポジトリなどにコミットしないよう注意してください。

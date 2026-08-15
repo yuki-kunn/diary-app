@@ -461,7 +461,109 @@
     } catch (e) {
       $('#storage-info').textContent = '';
     }
+    renderTokenList();
   }
+
+  // ===== Obsidian連携 =====
+  function fmtDateTime(ms) {
+    if (!ms) return '未使用';
+    return new Date(ms).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
+  async function renderTokenList() {
+    const list = $('#token-list');
+    try {
+      const tokens = await Api.getTokens();
+      list.innerHTML = '';
+      if (!tokens.length) {
+        list.innerHTML = '<p class="hint">まだトークンは発行していません。</p>';
+        return;
+      }
+      tokens.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'token-row';
+        row.innerHTML = `
+          <div class="token-row-info">
+            <strong>${escapeHtml(t.name)}</strong>
+            <span class="hint">…${t.id} / 最終使用: ${fmtDateTime(t.lastUsedAt)}</span>
+          </div>`;
+        const rm = document.createElement('button');
+        rm.className = 'btn-danger-ghost token-row-del';
+        rm.textContent = '失効';
+        rm.addEventListener('click', async () => {
+          if (!confirm(`「${t.name}」を失効させます。よろしいですか?`)) return;
+          try { await Api.deleteToken(t.id); toast('トークンを失効しました'); renderTokenList(); }
+          catch (e) { handleError(e); }
+        });
+        row.appendChild(rm);
+        list.appendChild(row);
+      });
+    } catch (e) {
+      list.innerHTML = '';
+    }
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  $('#obsidian-export-btn').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = '/api/export/markdown';
+    a.download = '';
+    a.click();
+  });
+
+  $('#token-create-btn').addEventListener('click', async () => {
+    const nameInput = $('#token-name-input');
+    const name = nameInput.value.trim() || 'Obsidian連携';
+    try {
+      const { token } = await Api.createToken(name);
+      nameInput.value = '';
+      $('#token-value').textContent = token;
+      $('#token-reveal').classList.remove('hidden');
+      renderTokenList();
+    } catch (e) { handleError(e); }
+  });
+
+  $('#token-copy-btn').addEventListener('click', async () => {
+    const value = $('#token-value').textContent;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast('コピーしました');
+    } catch {
+      toast('コピーできませんでした。手動で選択してください');
+    }
+  });
+
+  $('#obsidian-script-btn').addEventListener('click', () => {
+    const origin = location.origin;
+    const script = `#!/bin/bash
+# ひだまり日記 → Obsidian Vault 同期スクリプト
+# 使い方: sync-obsidian.sh <VaultのVault内フォルダパス>
+# 例:     ./sync-obsidian.sh ~/Documents/MyVault/hidamari
+#
+# cronで毎日自動実行する例(6時に同期):
+#   0 6 * * * /path/to/sync-obsidian.sh ~/Documents/MyVault/hidamari >> ~/sync-obsidian.log 2>&1
+
+set -e
+DEST="\${1:?同期先フォルダを指定してください}"
+API_BASE="${origin}"
+TOKEN="ここに設定画面で発行したトークンを貼り付け"  # hdmr_... 形式
+
+mkdir -p "$DEST"
+TMPZIP=$(mktemp)
+curl -sSf -H "Authorization: Bearer $TOKEN" "$API_BASE/api/export/markdown" -o "$TMPZIP"
+unzip -o -q "$TMPZIP" -d "$DEST"
+rm -f "$TMPZIP"
+echo "同期完了: $DEST/diary"
+`;
+    const blob = new Blob([script], { type: 'text/x-sh' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sync-obsidian.sh';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  });
 
   $('#notify-toggle').addEventListener('change', async (e) => {
     const toggle = e.target;

@@ -52,5 +52,10 @@ const Api = (() => {
     subscribe: (subscription) => req('/api/subscribe', { method: 'POST', body: { subscription } }),
     unsubscribe: (endpoint) => req('/api/unsubscribe', { method: 'POST', body: { endpoint } }),
     testPush: (endpoint) => req('/api/test-push', { method: 'POST', body: { endpoint } }),
+
+    // Obsidian連携: アクセストークン
+    getTokens: () => req('/api/tokens'),
+    createToken: (name) => req('/api/tokens', { method: 'POST', body: { name } }),
+    deleteToken: (id) => req(`/api/tokens/${id}`, { method: 'DELETE' }),
   };
 })();
